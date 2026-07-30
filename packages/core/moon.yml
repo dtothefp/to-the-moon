@@ -112,6 +112,67 @@ tasks:
     options:
       cache: false
 
+  # ---------------------------------------------------------------------------
+  # Alembic. dbmate owns the frozen historical migrations (db/migrations/*.sql) and is still
+  # the fresh-database path; alembic owns every schema change from its baseline forward.
+  # `up` runs both in the right order, which is exactly what Railway's preDeploy runs.
+  # ---------------------------------------------------------------------------
+
+  # apply dbmate history then every pending alembic revision. The one command to run.
+  up:
+    script: |
+      : "${DATABASE_URL:=postgresql://lab:lab@localhost:5432/sysdesign}"
+      export DATABASE_URL
+      uv run --package sysdesign-core python db/upgrade.py
+    toolchain: 'system'
+    options:
+      cache: false
+
+  # generate a revision by diffing common/models.py against the live database. Always read
+  # the generated file before committing: autogenerate is a first draft, not an oracle.
+  # usage: NAME=add_job_postings moon run core:revision
+  revision:
+    script: |
+      [ -n "$NAME" ] || { echo "usage: NAME=add_job_postings moon run core:revision"; exit 1; }
+      : "${DATABASE_URL:=postgresql://lab:lab@localhost:5432/sysdesign}"
+      export DATABASE_URL
+      uv run --package sysdesign-core alembic -c db/alembic.ini revision --autogenerate -m "$NAME"
+    toolchain: 'system'
+    options:
+      cache: false
+
+  # undo the most recent alembic revision (not the dbmate ones; use core:rollback for those).
+  downgrade:
+    script: |
+      : "${DATABASE_URL:=postgresql://lab:lab@localhost:5432/sysdesign}"
+      export DATABASE_URL
+      uv run --package sysdesign-core alembic -c db/alembic.ini downgrade -1
+    toolchain: 'system'
+    options:
+      cache: false
+
+  # which alembic revision the database is on, and what is pending.
+  alembic-status:
+    script: |
+      : "${DATABASE_URL:=postgresql://lab:lab@localhost:5432/sysdesign}"
+      export DATABASE_URL
+      uv run --package sysdesign-core alembic -c db/alembic.ini current -v
+      uv run --package sysdesign-core alembic -c db/alembic.ini history --indicate-current
+    toolchain: 'system'
+    options:
+      cache: false
+
+  # print the SQL a pending upgrade would run, without touching the database. Use this to
+  # review a revision before it goes anywhere near production.
+  alembic-sql:
+    script: |
+      : "${DATABASE_URL:=postgresql://lab:lab@localhost:5432/sysdesign}"
+      export DATABASE_URL
+      uv run --package sysdesign-core alembic -c db/alembic.ini upgrade head --sql
+    toolchain: 'system'
+    options:
+      cache: false
+
   # fire all six EXPLAIN drills at once (smoke test). To study one plan at a time,
   # open an interactive psql instead.
   drills:

@@ -6,6 +6,12 @@ requires-python = ">=3.13"
 dependencies = [
   "psycopg[binary]>=3.2",
   "psycopg-pool>=3.2",
+  # Schema layer. SQLAlchemy models are the declarative mirror of the database (common/models.py),
+  # Alembic diffs them to generate migrations, and pgvector supplies the Vector column type the
+  # embeddings tables need. The existing raw-psycopg call paths are untouched by all three.
+  "sqlalchemy>=2.0",
+  "alembic>=1.14",
+  "pgvector>=0.3",
   # Module 4: LangSmith tracing for the rating model call (standalone @traceable, no
   # LangChain). rating.py degrades to a passthrough when it's absent, but prod wants it.
   "langsmith>=0.10.2",

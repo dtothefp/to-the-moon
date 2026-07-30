@@ -182,10 +182,15 @@ moon run root:setup        # HOST: docker compose up db, then migrate + full see
 moon run core:db-init      # DEV CONTAINER: migrate + full seed (influencers + 4000 drill signals)
 moon run core:db-fresh     # DEV CONTAINER: drop db, re-migrate from empty, seed ONLY influencers (no signals)
 moon run core:db-empty     # DEV CONTAINER: drop db, re-migrate from empty, seed NOTHING (add influencers via the API)
-moon run core:migrate      # apply pending dbmate migrations (packages/core/db/migrations/*.sql)
-moon run core:status       # which migrations have run vs pending
-moon run core:rollback     # undo the most recent migration (its migrate:down)
-NAME=X moon run core:new   # scaffold the next timestamped migration
+moon run core:up           # THE schema command: dbmate history, then every pending alembic revision
+NAME=X moon run core:revision   # autogenerate an alembic revision by diffing common/models.py vs the db
+moon run core:alembic-status    # which alembic revision the db is on, and what's pending
+moon run core:alembic-sql       # print the SQL a pending upgrade would run, touching nothing
+moon run core:downgrade    # undo the most recent alembic revision
+moon run core:migrate      # dbmate only: apply pending packages/core/db/migrations/*.sql (frozen history)
+moon run core:status       # dbmate only: which .sql migrations have run vs pending
+moon run core:rollback     # dbmate only: undo the most recent .sql migration (its migrate:down)
+NAME=X moon run core:new   # dbmate only: scaffold a timestamped .sql migration (rarely what you want now)
 moon run core:seed         # full seed: watchlist + 4000 synthetic signals (drill volume)
 moon run core:seed-influencers  # just the watchlist, no signals
 moon run core:drills       # run packages/core/drills/explain-drills.sql (whole file, smoke test)
@@ -216,10 +221,42 @@ FastAPI generates the OpenAPI spec automatically (`/openapi.json`, Swagger at `/
 ReDoc at `/redoc`); no separate OpenAPI library. `operationId`s are the handler names
 (`list_signals`, `create_signal`) so generated clients read cleanly. `moon run api:openapi` dumps the spec to `services/api/openapi.json`
 (introspection only, no db/server), which the Module 2 Next.js frontend codegens a typed
-client from. Keep raw SQL via psycopg, no ORM. The explicit SQL is the studyable artifact
-(partition pruning, ON CONFLICT, index usage stay visible), and it matches the dbmate
-raw-SQL migration choice. A later tag revisits the data-access layer with SQLAlchemy as a
-deliberate before/after (same endpoints, ORM instead of raw SQL); Module 1 stays raw SQL.
+client from.
+
+## Schema layer: SQLAlchemy models plus Alembic
+
+Modules 1 to 6 were written in raw psycopg SQL on purpose. The explicit SQL is the studyable
+artifact (partition pruning, ON CONFLICT, index usage all stay visible), and it matched the
+dbmate raw-SQL migrations. That choice stops paying once the repo hosts more than one
+workload, because every new table then costs hand-written DDL plus hand-written CRUD.
+
+So the schema now has two layers, and they coexist deliberately.
+
+- `packages/core/common/models.py` is the declarative mirror of every table. Alembic diffs it
+  against the live database to generate migrations, so a new table is written once here
+  instead of twice (model and SQL). `packages/core/common/session.py` supplies the engine,
+  the `session_scope()` contextmanager, and a `db_session` FastAPI dependency.
+- The dbmate `.sql` files in `packages/core/db/migrations/` are frozen history. They still
+  build a database from empty and they're still the record of how Modules 1 to 6 got here.
+  Nothing new goes in there.
+- `packages/core/db/upgrade.py` runs both, in that order, and is what Railway's
+  `preDeployCommand` and CI both call. On an existing database dbmate reports up to date and
+  Alembic applies what's new; on a fresh one dbmate builds the world and Alembic's empty
+  baseline revision is a no-op. Both halves are idempotent.
+
+Existing psycopg call paths are untouched. Nothing forces a rewrite, and the raw-SQL read
+paths in `common/search.py` and friends stay as they are because their SQL is the lesson.
+New tables and new query code should use the models.
+
+Two guard rails worth knowing before you touch this. Alembic autogenerate cannot see the
+monthly `raw_signals_*` partitions, the `daily_signal_rollup` matview, or either migration
+bookkeeping table, so `common/schema_filter.py` hides all four; without that filter the first
+generated revision confidently proposes dropping the partitioned data. And
+`packages/core/tests/test_orm_schema.py` asserts that autogenerate produces an EMPTY diff
+against the live schema, which runs in CI with a real Postgres. If the models and the
+migrations drift, the build goes red rather than a later deploy going sideways.
+
+Always read a generated revision before committing it. Autogenerate is a first draft.
 
 To study a single query plan, don't use `moon run core:drills` (it fires the whole file at once).
 Open an interactive shell with `psql "$DATABASE_URL"` and paste one drill block at a time.
@@ -237,10 +274,11 @@ which reintroduces the 5432 collision.
 ## Git workflow
 
 App tier. ALWAYS a feature branch plus PR. Never commit to `main` directly. Tag each
-completed module on `main` (`git tag module-1 && git push origin module-1`). Schema
-changes go through a new dbmate migration in `packages/core/db/migrations/` (`NAME=...
-moon run core:new`), never by editing an already-applied migration file. Add the `migrate:down`
-block too, so rollback works.
+completed module on `main` (`git tag module-1 && git push origin module-1`). Schema changes
+go through Alembic now: edit `packages/core/common/models.py`, run `NAME=... moon run
+core:revision`, read the generated file, then `moon run core:up`. Never edit an
+already-applied migration, dbmate or Alembic. Write the `downgrade()` body too, so rollback
+works.
 
 ## The one idempotency sentence
 
