@@ -4,8 +4,10 @@
 # has one lock there, and the root pyproject's testpaths cover every member's tests.
 #
 # A pgvector Postgres service is stood up so the `integration`-marked tests exercise the
-# real app + DB (they auto-skip locally when no DB is reachable). dbmate applies the schema;
-# no seed is needed because the integration tests don't depend on seeded rows.
+# real app + DB (they auto-skip locally when no DB is reachable). The schema is applied by
+# db/upgrade.py, the same entrypoint Railway runs, so the schema drift test in
+# packages/core/tests/test_orm_schema.py fails the build whenever the SQLAlchemy models and
+# the migrations disagree. No seed is needed; the integration tests don't read seeded rows.
 
 name: ci
 
@@ -63,11 +65,11 @@ jobs:
             https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
           sudo chmod +x /usr/local/bin/dbmate
 
-      # dbmate invoked directly instead of through moon: CI has no reason to install the
-      # task runner just to call one wrapped command, and the flags match
-      # packages/core/moon.yml's migrate task.
-      - name: Apply migrations
-        run: dbmate --no-dump-schema --migrations-dir packages/core/db/migrations --url "$DATABASE_URL?sslmode=disable" up
+      # The same entrypoint Railway's preDeployCommand runs: dbmate history, then alembic.
+      # Calling it here means CI exercises the real deploy path, not an approximation of it,
+      # and the schema the integration tests run against is the schema prod will have.
+      - name: Apply migrations (dbmate history, then alembic)
+        run: uv run python packages/core/db/upgrade.py
 
       - name: Test (pytest, including DB integration tests)
         run: uv run pytest

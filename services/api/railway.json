@@ -19,7 +19,7 @@
   "environments": {
     "production": {
       "deploy": {
-        "preDeployCommand": "uv run --package sysdesign-core python packages/core/db/migrate.py"
+        "preDeployCommand": "uv run --package sysdesign-core python packages/core/db/upgrade.py"
       }
     }
   }
