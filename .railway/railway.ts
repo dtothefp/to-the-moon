@@ -75,7 +75,9 @@ export default defineRailway((ctx) => {
   const worker = service("worker", {
     source: toTheMoon,
     build: { watchPatterns: ["services/worker/**", "packages/core/**", "packages/task-contract/**", "pyproject.toml", "uv.lock"] },
-    start: "uv run --package sysdesign-worker celery -A worker.celery_app worker --beat --loglevel INFO --concurrency 4",
+    // One prefork child. Each child is a full Python process, and Railway bills the RAM they hold
+    // while idle (4 children plus beat sat at ~0.6 GB). Local dev keeps 4 in services/worker/moon.yml.
+    start: "uv run --package sysdesign-worker celery -A worker.celery_app worker --beat --loglevel INFO --concurrency 1",
     deploy: restart,
     replicas: { "us-west2": 1 },
     env: {
