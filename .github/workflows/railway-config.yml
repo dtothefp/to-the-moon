@@ -1,0 +1,48 @@
+# Plans .railway/railway.ts on every PR that touches it and applies that exact plan on merge.
+# Railway itself never applies railway.ts on push, this workflow is what does.
+# RAILWAY_TOKEN is a project token for sysdesign production (name github-actions-config).
+#
+# Plan fails until the cutover in infra/README.md runs, because api, worker and chat still
+# have their Railway Config File pointed at services/*/railway.json.
+name: Railway config
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - ".railway/**"
+      - ".github/workflows/railway-config.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  plan:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The SDK lives in .railway/package.json (no root package.json), and the action only
+      # installs root dependencies.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix .railway --no-audit --no-fund
+      - uses: railwayapp/config@v1
+        with:
+          command: plan
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+
+  apply:
+    if: github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: railwayapp/config@v1
+        with:
+          command: apply
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
