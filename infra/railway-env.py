@@ -55,11 +55,6 @@ REDIS_BASE = "redis://:${{redis.REDIS_PASSWORD}}@${{redis.RAILWAY_PRIVATE_DOMAIN
 MANIFEST = {
     "api": {
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
-        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
-        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
-        # window. Remove this line and the Railway vars when the Supabase compute
-        # addons get dropped.
-        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
@@ -101,11 +96,6 @@ MANIFEST = {
     },
     "worker": {
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
-        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
-        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
-        # window. Remove this line and the Railway vars when the Supabase compute
-        # addons get dropped.
-        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
