@@ -79,8 +79,8 @@ ASCII diagrams.
 - **[uv](https://docs.astral.sh/uv/) workspace.** One `uv.lock` at the root covers
   every Python package. `uv sync --all-packages` and you're done.
 - **Railway instead of a cloud giant.** Four Railway services and a Railway
-  Postgres run this whole thing for pocket change. Config lives as code
-  (`railway.json` per service). Every PR gets its own preview environment. pgvector
+  Postgres run this whole thing for pocket change. Config lives as code in
+  `.railway/railway.ts` (Railway IaC). Every PR gets its own preview environment. pgvector
   is one `CREATE EXTENSION` away.
 - **Dev containers three ways.** A `.devcontainer/` with its own sibling Postgres
   (works in Cursor and VS Code and never collides with your host's 5432). A
@@ -100,6 +100,7 @@ ASCII diagrams.
 ```
 moon.yml                 root moon project, workspace lifecycle (root:setup, root:up, ...)
 .moon/                   moon workspace config, pins the moon version
+.railway/                Railway IaC (railway.ts) for every service
 apps/chat-web/           React chat UI (scaffold)
 services/api/            FastAPI surface + railway.json + tests
 services/worker/         Celery worker + beat + railway.json

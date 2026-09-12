@@ -148,11 +148,14 @@ setup, format, ollama-pull) in the root-level moon project (`moon.yml` at the re
 moon is a standalone Rust binary, not a node package. Install it with `brew install moon`
 on the host; the dev container and Cursor Cloud VM fetch a pinned release binary in their
 own setup. The version is pinned in `.moon/workspace.yml` (`versionConstraint`), so there
-is no `package.json`, no pnpm, and no node in the backend toolchain.
+is no root `package.json`, no pnpm, and no node in the backend toolchain. The one exception
+is `.railway/package.json`. It only holds the Railway IaC SDK that `.railway/railway.ts`
+imports, and nothing in the Python workspace touches it.
 
 ```
 moon.yml          root moon project: workspace lifecycle tasks (root:up, root:setup, ...)
 .moon/            moon workspace config (doubles as the .env loader's repo-root marker)
+.railway/         Railway IaC: railway.ts (every service's build/run/env) + its own package.json
 apps/chat-web/    React chat agent UI (scaffold, Module 7)
 services/api/     FastAPI surface (sysdesign-api): api/, tests/, railway.json, openapi.json
 services/worker/  Celery worker + beat (sysdesign-worker): worker/, railway.json

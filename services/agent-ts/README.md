@@ -81,16 +81,21 @@ Same variables as the Python agent, same inert-until-keyed contract.
 
 ## Deploy to Railway (not yet provisioned)
 
-Config-as-code is committed (`railway.json`), build with `npm ci && npm run build`, start with
-`npm run start`, healthcheck `/health`. The one-time provisioning is a deliberate step, not scripted:
+The service is defined in `.railway/railway.ts` (`agentTs`) but gated off. Root directory
+`services/agent-ts/`, build `npm ci && npm run build`, start `npm run start`, healthcheck
+`/health`. There's no `railway.json` anymore, since Railway won't let new services use Config
+as Code. To provision it:
 
-1. Create a new service in the sysdesign Railway project, GitHub-connected to this repo.
-2. Set its **root directory** to `services/agent-ts/` so the build runs against this `package.json`.
-3. Point its config to this `railway.json`.
+1. Flip `PROVISION_AGENT_TS` to `true` in `.railway/railway.ts`.
+2. `railway config plan` from the repo root. It must show only the `agent-ts` create.
+3. `railway config apply`.
 4. Set the env vars above (share the LangSmith, Anthropic, and API values with the Python agent,
    which is exactly the case Railway **shared variables** solve, tracked in the package TODO).
 5. Optionally give it its own subdomain, the same way the Python agent got `chat.` (see
    `package-infra-services/railway/AGENTS.md`).
+
+Plan only works once api, worker and chat are off `railway.json`. See the IaC section of
+`infra/README.md`.
 
 ## Note on CI
 

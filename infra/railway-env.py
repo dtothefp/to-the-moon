@@ -40,7 +40,7 @@ SERVICES = {
     # service from "agent": that one is the ReAct chat agent (services/agent), this one is the
     # message-delivery socket server. Named "messaging" precisely so the two don't get confused,
     # since the repo dir services/chat and the agent's public "chat" domain both want that word.
-    # Same lazy-provision pattern: create the Railway service pointed at services/chat/railway.json,
+    # Same lazy-provision pattern: create the service from .railway/railway.ts (PROVISION_MESSAGING),
     # drop its id in the repo-root .env as RAILWAY_MESSAGING_SERVICE_ID, and it's injected at runtime.
     "messaging": "",
 }
@@ -55,11 +55,6 @@ REDIS_BASE = "redis://:${{redis.REDIS_PASSWORD}}@${{redis.RAILWAY_PRIVATE_DOMAIN
 MANIFEST = {
     "api": {
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
-        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
-        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
-        # window. Remove this line and the Railway vars when the Supabase compute
-        # addons get dropped.
-        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
@@ -101,11 +96,6 @@ MANIFEST = {
     },
     "worker": {
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
-        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
-        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
-        # window. Remove this line and the Railway vars when the Supabase compute
-        # addons get dropped.
-        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
@@ -168,8 +158,8 @@ MANIFEST = {
         # punted; identity is a user_id query param until Supabase JWT lands).
         #
         # Same Railway Postgres as api + worker. The msg_* tables coexist with the scraper schema,
-        # and the service's own railway.json preDeployCommand runs migrate.py so the schema is
-        # applied on deploy.
+        # and the service's production preDeploy in .railway/railway.ts runs migrate.py so the
+        # schema is applied on deploy.
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
         # For step 2: publish each message to a Redis channel, every instance subscribes, and the
         # instance holding the recipient's socket does the local push. Same shared redis + rotating
