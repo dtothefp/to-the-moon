@@ -57,8 +57,10 @@ railway config plan                    # read-only diff against live
 - Needs Railway CLI 5.42.1 or newer (tested on 5.54.0). Don't set `RAILWAY_IAC_TS_BIN`. The
   SDK 3.11 `railway-iac-ts` bin is a stub that always throws the upgrade error.
 - Nothing applies railway.ts on push. GitHub deploys still build from the repo. Only
-  `railway config apply` (or the `railwayapp/config` GitHub Action, not wired up) changes
-  service settings.
+  `railway config apply` (or the `railwayapp/config` GitHub Action in
+  `.github/workflows/railway-config.yml`) changes service settings. The Action is off until
+  the cutover. Both jobs skip unless the repo variable `RAILWAY_IAC_ENABLED` is `true`.
+  Its `RAILWAY_TOKEN` secret is a sysdesign production project token.
 - Leaving something out means delete it, not leave it alone. That's why every live var is
   listed as `preserve()`.
 - Never `apply` a plan you didn't expect. `railway config plan --detailed-exit-code` exits 0
@@ -83,6 +85,8 @@ would change how they deploy. In this order it's behavior-neutral.
 5. Delete `services/{api,worker,agent}/railway.json`.
 6. Redeploy each service. Check the deploy is SUCCESS, the deploy logs are clean, and
    `https://sysdesign.thedefrag.ai/health` and `https://chat.thedefrag.ai/health` return 200.
+7. Turn the Action on with `gh variable set RAILWAY_IAC_ENABLED --body true`. From then on
+   every PR touching `.railway/` gets a plan comment and merging applies that plan.
 
 `railway config migrate --apply` also clears the Config File, but it rebuilds railway.ts
 from the json files alone. It drops watch patterns, restart policy, the pre-deploy step,

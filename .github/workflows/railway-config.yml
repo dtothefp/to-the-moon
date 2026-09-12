@@ -2,8 +2,9 @@
 # Railway itself never applies railway.ts on push, this workflow is what does.
 # RAILWAY_TOKEN is a project token for sysdesign production (name github-actions-config).
 #
-# Plan fails until the cutover in infra/README.md runs, because api, worker and chat still
-# have their Railway Config File pointed at services/*/railway.json.
+# Off until the cutover in infra/README.md runs. api, worker and chat still have their Railway
+# Config File pointed at services/*/railway.json, so plan refuses them. Both jobs skip unless the
+# repo variable RAILWAY_IAC_ENABLED is "true" (gh variable set RAILWAY_IAC_ENABLED --body true).
 name: Railway config
 
 on:
@@ -20,7 +21,7 @@ permissions:
 
 jobs:
   plan:
-    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    if: vars.RAILWAY_IAC_ENABLED == 'true' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +37,7 @@ jobs:
           railway-token: ${{ secrets.RAILWAY_TOKEN }}
 
   apply:
-    if: github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository
+    if: vars.RAILWAY_IAC_ENABLED == 'true' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
