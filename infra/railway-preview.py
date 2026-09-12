@@ -19,7 +19,7 @@ from the RAILWAY_WORKSPACE_TOKEN repo secret.
 What "up" does, in order, all idempotent:
   1. environmentCreate(sourceEnvironmentId=production, skipInitialDeploys=true)
      unless pr-<n> already exists. Cloning copies service instances and env vars
-     (including the ${{redis...}} reference templates and the shared Supabase
+     (including the ${{redis...}} reference templates and the shared Railway
      DATABASE_URL, see the preview-env section of infra/README.md for why that's
      a hazard worth knowing about).
   2. deploymentTriggerUpdate on every cloned trigger (api + worker) so they
@@ -36,7 +36,7 @@ What "up" does, in order, all idempotent:
 
 Migrations do NOT run in preview environments. services/api/railway.json scopes
 preDeployCommand to the production environment because previews share the
-production Supabase database.
+production Railway database.
 """
 
 import json

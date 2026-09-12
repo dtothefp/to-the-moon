@@ -54,7 +54,12 @@ REDIS_BASE = "redis://:${{redis.REDIS_PASSWORD}}@${{redis.RAILWAY_PRIVATE_DOMAIN
 # or ("literal", VALUE) = use VALUE as-is (safe for non-secrets and references).
 MANIFEST = {
     "api": {
-        "DATABASE_URL": ("env", "DATABASE_URL_SUPABASE"),
+        "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
+        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
+        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
+        # window. Remove this line and the Railway vars when the Supabase compute
+        # addons get dropped.
+        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
@@ -95,7 +100,12 @@ MANIFEST = {
         "LANGSMITH_API_KEY": ("env_optional", "LANGSMITH_API_KEY_PROD"),
     },
     "worker": {
-        "DATABASE_URL": ("env", "DATABASE_URL_SUPABASE"),
+        "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
+        # TEMPORARY, delete after 2026-09-19. Postgres moved off Supabase to Railway on
+        # 2026-09-12; this keeps the old URL one variable-swap away for the rollback
+        # window. Remove this line and the Railway vars when the Supabase compute
+        # addons get dropped.
+        "DATABASE_URL_SUPABASE_ROLLBACK": ("env_optional", "DATABASE_URL_SUPABASE_ROLLBACK"),
         "REDIS_URL": ("literal", REDIS_BASE),
         "CELERY_BROKER_URL": ("literal", REDIS_BASE + "/0"),
         "CELERY_RESULT_BACKEND": ("literal", REDIS_BASE + "/1"),
@@ -157,10 +167,10 @@ MANIFEST = {
         # over Redis pub/sub, nothing else. No Apify, no LLM keys, no API client key (auth is
         # punted; identity is a user_id query param until Supabase JWT lands).
         #
-        # Same Supabase Postgres as api + worker. The msg_* tables coexist with the scraper schema,
+        # Same Railway Postgres as api + worker. The msg_* tables coexist with the scraper schema,
         # and the service's own railway.json preDeployCommand runs migrate.py so the schema is
         # applied on deploy.
-        "DATABASE_URL": ("env", "DATABASE_URL_SUPABASE"),
+        "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
         # For step 2: publish each message to a Redis channel, every instance subscribes, and the
         # instance holding the recipient's socket does the local push. Same shared redis + rotating
         # ${{...}} password reference as api/worker, so multi-instance chat and the Celery broker

@@ -17,7 +17,7 @@
 
 A playground for agentic skeletons who like fun tools.
 
-[Apify](https://apify.com) · [Celery](https://docs.celeryq.dev) · [FastAPI](https://fastapi.tiangolo.com) · [pgvector](https://github.com/pgvector/pgvector) · [Supabase](https://supabase.com) · [Railway](https://railway.com) · [moon](https://moonrepo.dev) · [Anthropic Managed Agents](https://docs.claude.com/en/docs/agents-and-tools/managed-agents)
+[Apify](https://apify.com) · [Celery](https://docs.celeryq.dev) · [FastAPI](https://fastapi.tiangolo.com) · [pgvector](https://github.com/pgvector/pgvector) · [Railway](https://railway.com) · [moon](https://moonrepo.dev) · [Anthropic Managed Agents](https://docs.claude.com/en/docs/agents-and-tools/managed-agents)
 
 ## The pipeline
 
@@ -39,7 +39,7 @@ A playground for agentic skeletons who like fun tools.
                                        │
         ┌──────────────────────────────┘
         ▼
-  Postgres on Supabase
+  Postgres on Railway
    partitioned tables
    full-text GIN index
    pgvector HNSW index
@@ -62,7 +62,7 @@ The app grew in modules. Each finished module has a git tag (`module-1`,
 |---|---|
 | 1. Data model | Partitioned Postgres with per-partition indexes. A materialized view. EXPLAIN drills you can run yourself |
 | 2. Celery fan-out | `POST /runs` fans out a chord (one task per creator). Progress streams over Server-Sent Events. The matview refreshes on fan-in |
-| 3. Deploy | Railway for api + worker + Redis + agent. Supabase Postgres with pgvector. Migrations run as a pre-deploy step so code never ships ahead of schema |
+| 3. Deploy | Railway for api + worker + Redis + agent, and Railway Postgres with pgvector. Migrations run as a pre-deploy step so code never ships ahead of schema |
 | 4. LLM rating layer | One structured-output rating job per new signal through a provider-agnostic adapter. Local dev rates through Ollama for free. Prod rents a hosted model |
 | 5. Managed Agents | A scheduled Anthropic Managed Agent pulls the week's rated signals through the deployed API over MCP. Compares against last week via a Memory Store. Writes digests |
 | 6. Hybrid search | Postgres full-text + pgvector HNSW run in parallel. Fused with Reciprocal Rank Fusion. No embedding key means lexical-only and it says so |
@@ -78,8 +78,8 @@ ASCII diagrams.
   fought Lerna or a wall of Makefiles moon is the palate cleanser.
 - **[uv](https://docs.astral.sh/uv/) workspace.** One `uv.lock` at the root covers
   every Python package. `uv sync --all-packages` and you're done.
-- **Railway + Supabase instead of a cloud giant.** Four Railway services and a
-  Supabase Postgres run this whole thing for pocket change. Config lives as code
+- **Railway instead of a cloud giant.** Four Railway services and a Railway
+  Postgres run this whole thing for pocket change. Config lives as code
   (`railway.json` per service). Every PR gets its own preview environment. pgvector
   is one `CREATE EXTENSION` away.
 - **Dev containers three ways.** A `.devcontainer/` with its own sibling Postgres
