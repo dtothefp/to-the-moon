@@ -1,0 +1,9 @@
+{
+  "name": "sysdesign-railway-iac",
+  "private": true,
+  "description": "Railway Infrastructure as Code only (.railway/railway.ts). Self-contained on purpose, the repo has no root package.json. Nothing in the Python workspace imports this.",
+  "type": "module",
+  "devDependencies": {
+    "railway": "3.11.0"
+  }
+}

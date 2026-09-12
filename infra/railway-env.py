@@ -40,7 +40,7 @@ SERVICES = {
     # service from "agent": that one is the ReAct chat agent (services/agent), this one is the
     # message-delivery socket server. Named "messaging" precisely so the two don't get confused,
     # since the repo dir services/chat and the agent's public "chat" domain both want that word.
-    # Same lazy-provision pattern: create the Railway service pointed at services/chat/railway.json,
+    # Same lazy-provision pattern: create the service from .railway/railway.ts (PROVISION_MESSAGING),
     # drop its id in the repo-root .env as RAILWAY_MESSAGING_SERVICE_ID, and it's injected at runtime.
     "messaging": "",
 }
@@ -168,8 +168,8 @@ MANIFEST = {
         # punted; identity is a user_id query param until Supabase JWT lands).
         #
         # Same Railway Postgres as api + worker. The msg_* tables coexist with the scraper schema,
-        # and the service's own railway.json preDeployCommand runs migrate.py so the schema is
-        # applied on deploy.
+        # and the service's production preDeploy in .railway/railway.ts runs migrate.py so the
+        # schema is applied on deploy.
         "DATABASE_URL": ("env", "DATABASE_URL_RAILWAY"),
         # For step 2: publish each message to a Redis channel, every instance subscribes, and the
         # instance holding the recipient's socket does the local push. Same shared redis + rotating

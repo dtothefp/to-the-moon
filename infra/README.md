@@ -10,29 +10,83 @@ It moved off Supabase on 2026-09-12; see
 
 | Service | Source | Runs |
 |---|---|---|
-| `api` | GitHub `dtothefp/to-the-moon`, root = repo root | uvicorn via `services/api/railway.json`, public domain |
-| `worker` | same repo + root | Celery worker with beat embedded, via `services/worker/railway.json`, private |
-| `chat` | same repo + root | Module 7 chat AGENT (the ReAct loop) via `services/agent/railway.json`, public domain |
-| `messaging` | same repo + root | messaging drill: FastAPI + WebSocket direct-messaging gateway via `services/chat/railway.json`, public domain. NOT the same as `chat` above (that is the agent); this is the socket server that delivers messages |
+| `api` | GitHub `dtothefp/to-the-moon`, root = repo root | uvicorn, public domain `sysdesign.thedefrag.ai` |
+| `worker` | same repo + root | Celery worker with beat embedded, private |
+| `chat` | same repo + root | Module 7 chat AGENT (the ReAct loop, code in `services/agent`), public domain `chat.thedefrag.ai` |
 | `redis` | image `redis:7-alpine` + volume | broker, result backend, SSE pub/sub, and (step 2) chat fan-out, private |
 
-## Where each piece of config lives (the IaC-lite contract)
+All four are defined in [.railway/railway.ts](../.railway/railway.ts). Two more are defined
+there but not provisioned, each behind a flag. `messaging` is the messaging drill's FastAPI +
+WebSocket gateway (code in `services/chat`, NOT the same as `chat` above, that one's the
+agent). `agent-ts` is the TypeScript agent port.
+
+## Where each piece of config lives
 
 We deliberately skipped Terraform. Railway has no official provider and the community one
-is niche; the platform's own config-as-code story is a per-service `railway.json` plus
-GitHub-connected auto-deploys. So the codified surface is
+is niche. Railway's own Infrastructure as Code is the codified surface.
 
-- **Build + run config** in `services/api/railway.json` and `services/worker/railway.json`
-  (start command, healthcheck, restart policy). Reviewed in PRs like any code. Railway
-  reads them because each service's settings point at the file (repo-root path, set once).
-- **Env vars** in [railway-env.py](railway-env.py). The manifest in that script says which
-  variables each service gets and where values come from (the repo-root `.env`, gitignored).
-  `python3 infra/railway-env.py list` shows what's live on Railway with secrets redacted;
-  `sync --dry` diffs manifest vs remote and flags drift (vars on Railway the manifest
-  doesn't know about); `sync` pushes. No more mystery vars.
-- **One-time provisioning** (project, services, volume, domains) was done over Railway's
-  GraphQL API with the project-scoped token and is documented here rather than replayed by
-  a tool. It changes rarely; when it changes, update this file in the same PR.
+- **Service shape** in [.railway/railway.ts](../.railway/railway.ts). Sources, watch
+  patterns, start commands, healthchecks, restart policy, the production-only migration
+  step, replicas, domains, redis and its volume. Reviewed in PRs like any code.
+- **Env var values** in [railway-env.py](railway-env.py). railway.ts lists every var but
+  marks each one `preserve()`, so it never holds a value. The manifest in the script says
+  which variables each service gets and where values come from (the repo-root `.env`,
+  gitignored). `python3 infra/railway-env.py list` shows what's live on Railway with secrets
+  redacted, `sync --dry` diffs manifest vs remote and flags drift, `sync` pushes.
+- **One-time account-level provisioning** (the GitHub connection, DNS records) is
+  documented here rather than scripted. It changes rarely. When it changes, update this file
+  in the same PR.
+
+### Status: staged, not cut over
+
+api, worker and chat still have their Railway Config File pointed at
+`services/{api,worker,agent}/railway.json`. Railway reads those at deploy time, and
+`railway config plan` refuses to manage a service that's still bound to one. So today
+railway.ts is the reviewed target and the three railway.json files are what's live. Change
+both together until the cutover below runs. The messaging and agent-ts json files are gone.
+Neither service exists, and new services can't use `railway.json`.
+
+### Using railway.ts
+
+```
+cd .railway && npm install && cd ..    # the SDK railway.ts imports, self-contained on purpose
+railway link --project 12dffbd4-65bd-44f7-83b7-d30238c92892 --environment production
+railway config plan                    # read-only diff against live
+```
+
+- Needs Railway CLI 5.42.1 or newer (tested on 5.54.0). Don't set `RAILWAY_IAC_TS_BIN`. The
+  SDK 3.11 `railway-iac-ts` bin is a stub that always throws the upgrade error.
+- Nothing applies railway.ts on push. GitHub deploys still build from the repo. Only
+  `railway config apply` (or the `railwayapp/config` GitHub Action, not wired up) changes
+  service settings.
+- Leaving something out means delete it, not leave it alone. That's why every live var is
+  listed as `preserve()`.
+- Never `apply` a plan you didn't expect. `railway config plan --detailed-exit-code` exits 0
+  when there's nothing to do.
+
+### Cutover runbook (not run yet)
+
+Clearing the Config File is a live settings change. The service instances hold no start
+command, healthcheck, restart policy or pre-deploy step of their own, so clearing it alone
+would change how they deploy. In this order it's behavior-neutral.
+
+1. Ship the railway-preview.py change first. It must stop pinning `railwayConfigFile` on
+   cloned instances and must clear `preDeployCommand` on the cloned api. Step 2 puts the
+   migration step on the production api instance, and previews clone that instance, so
+   without this previews would start migrating the shared production database.
+2. For api, worker and chat in production, copy each railway.json's values onto the service
+   (start command, healthcheck path and timeout, restart policy, watch patterns, and api's
+   pre-deploy command). The file still wins at deploy time, so this changes nothing yet.
+3. Clear the Railway Config File on the three services.
+4. `railway config plan --detailed-exit-code` must exit 0. Fix railway.ts until it does.
+   Don't apply a non-empty plan to get there.
+5. Delete `services/{api,worker,agent}/railway.json`.
+6. Redeploy each service. Check the deploy is SUCCESS, the deploy logs are clean, and
+   `https://sysdesign.thedefrag.ai/health` and `https://chat.thedefrag.ai/health` return 200.
+
+`railway config migrate --apply` also clears the Config File, but it rebuilds railway.ts
+from the json files alone. It drops watch patterns, restart policy, the pre-deploy step,
+sources and redis. Don't use it here.
 
 Redis auth is one `REDIS_PASSWORD` on the redis service (generated at provision time, not
 managed by sync). api + worker consume it through Railway reference templates
@@ -69,7 +123,8 @@ the `verificationDnsHost` / `verificationToken` fields on the custom domain's `s
 
 ### Gotcha: uvicorn behind Railway's proxy needs `--forwarded-allow-ips='*'`
 
-The api start command in `services/api/railway.json` carries
+The api start command (`.railway/railway.ts`, and `services/api/railway.json` until the
+cutover) carries
 `--proxy-headers --forwarded-allow-ips='*'`. Railway terminates TLS at its edge and forwards
 plain HTTP to the container, so every request arrives with `X-Forwarded-Proto: https` but a
 raw `http` scheme on the socket. Uvicorn only honors that header from IPs listed in
@@ -88,16 +143,15 @@ here because the container is only reachable through Railway's proxy (no direct 
 
 ## Migrations
 
-The api runs migrations before it takes traffic, via the `preDeployCommand` in
-`services/api/railway.json`:
+The api runs migrations before it takes traffic, via its pre-deploy command
 
 ```
-uv run python db/migrate.py
+uv run --package sysdesign-core python packages/core/db/upgrade.py
 ```
 
-The command is scoped to the production environment (nested under
-`environments.production` in the config file, Railway's per-environment override
-syntax) so PR preview environments never migrate. Previews share the production
+The command is scoped to the production environment so PR preview environments never
+migrate. In `.railway/railway.ts` that's the `isProd` guard. In `services/api/railway.json`,
+still live until the cutover, it's nested under `environments.production`. Previews share the production
 Railway database, and a PR branch carrying a new migration must not rewrite the
 shared schema just by deploying a preview. See the preview section below for the
 flip side of that hazard.
@@ -134,26 +188,26 @@ Connecting a service to GitHub is the one thing the token cannot do (it's a user
 
 ### Provisioning the messaging gateway (one-time, in progress)
 
-The codified surface is done and merged: `services/chat/railway.json` (build/run + a
-production `preDeployCommand` that applies the `msg_*` migration), the `messaging` entry in
-[railway-env.py](railway-env.py)'s `SERVICES` + `MANIFEST`, and the lazy id injection in
-`main`. What's left needs the dashboard (GitHub connect) plus the project token, in order:
+The codified surface is merged. The `messaging` service in `.railway/railway.ts` (build/run
+plus a production pre-deploy step that applies the `msg_*` migration) sits behind
+`PROVISION_MESSAGING`, next to the `messaging` entry in [railway-env.py](railway-env.py)'s
+`SERVICES` + `MANIFEST` and the lazy id injection in `main`. It needs the IaC cutover first,
+since plan won't run until then. What's left, in order.
 
-1. **Create the service** in the `sysdesign` project's `production` environment, source =
-   GitHub `dtothefp/to-the-moon`, root = repo root (same as api/worker). Name it
-   `messaging`.
-2. **Point it at the config file.** Service settings, set the Railway config path to
-   `services/chat/railway.json` (Railway reads build + start + healthcheck +
-   `preDeployCommand` from there, exactly like api).
-3. **Generate a public domain** if you want to reach `/ws` from outside (WebSocket upgrade
+1. **Create the service.** Flip `PROVISION_MESSAGING` to `true`, run `railway config plan`
+   and check it shows only the `messaging` create, then `railway config apply`. If apply
+   can't connect the GitHub source, create the service in the dashboard first (GitHub
+   `dtothefp/to-the-moon`, root = repo root, named `messaging`) and plan again. There's no
+   config path to set, new services can't use `railway.json`.
+2. **Generate a public domain** if you want to reach `/ws` from outside (WebSocket upgrade
    works over the normal HTTPS domain; the `--proxy-headers --forwarded-allow-ips='*'` in
    the start command is already there for the proxy). Keep it private if only in-cluster.
-4. **Record the id.** Copy the new service id into the repo-root `.env` as
+3. **Record the id.** Copy the new service id into the repo-root `.env` as
    `RAILWAY_MESSAGING_SERVICE_ID=...` so the sync script stops skipping it.
-5. **Push env vars.** `python3 infra/railway-env.py sync --dry` to preview
+4. **Push env vars.** `python3 infra/railway-env.py sync --dry` to preview
    (`DATABASE_URL` from `DATABASE_URL_RAILWAY`, `REDIS_URL` from the shared reference
    template), then drop `--dry` to push.
-6. **Deploy.** It auto-deploys on the next push to `main`, or trigger one manually. The
+5. **Deploy.** It auto-deploys on the next push to `main`, or trigger one manually. The
    `preDeployCommand` runs `migrate.py` first, so the `msg_*` tables are created before the
    gateway starts. Healthcheck is `GET /health`.
 
