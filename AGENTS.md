@@ -28,14 +28,16 @@ in one repo that accumulates. Each finished module gets a git tag (`module-1`,
   Full first-principles walkthrough (Redis's two hats, chord = distributed Promise.all,
   snapshot-then-deltas SSE, debugging with `--pool solo`) in [docs/module-2.md](docs/module-2.md).
 - **Module 3, deploy (SHIPPED).** Railway for the API + worker + Redis (next to the
-  existing shared AI service), Postgres on Supabase with pgvector enabled. Live at
+  existing shared AI service), Postgres on Railway with pgvector enabled (it lived on
+  Supabase until 2026-09-12; see infra/README.md). Live at
   sysdesign.thedefrag.ai; the infra contract, gotchas, and migration story are in
   [infra/README.md](infra/README.md). Migrations run automatically as the api's
   `preDeployCommand` (a deploy can't ship code ahead of its schema). A planned piece,
-  moving the beat backstop to a Supabase Edge Function on pg_cron to learn the serverless
+  moving the beat backstop to a serverless scheduled function to learn the serverless
   constraints (stateless, wall-clock limits, chunked work re-entered via a durable run
-  row), is DEFERRED until the Supabase single-project consolidation decides which project
-  the function lives in (see `packages/package-supabase/`). The lesson stands either way,
+  row), is DEFERRED. It was scoped as a Supabase Edge Function on pg_cron, which no longer
+  applies now that Postgres is on Railway; the replacement is likely a Railway cron
+  service or a Vercel cron route. The lesson stands either way,
   long unreliable work stays on the queue-backed worker, short scheduled work goes
   serverless.
 - **Module 4, AI rating layer (BUILT, semantic cache BUILT in Module 6).** An LLM lands in the write

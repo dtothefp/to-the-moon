@@ -1,8 +1,12 @@
 # Deploy infra (Module 3)
 
 Railway project **sysdesign** (`12dffbd4-65bd-44f7-83b7-d30238c92892`), one `production`
-environment. Postgres is NOT here, it lives on Supabase
-(project `bmrwhbubywwaxyyynvgx`, reached via the us-east-1 session pooler).
+environment. Postgres is NOT here, it lives in the sibling Railway project
+**ai-backend** (`d839d383-445b-4eae-8f49-1aec4ea6a4ba`), service `postgres`, database
+`sysdesign`. Railway private networking is per-project, so these services reach it over
+its TCP proxy at `altaria.proxy.rlwy.net:12563` rather than `.railway.internal`.
+It moved off Supabase on 2026-09-12; see
+`context/migrations/supabase-to-railway-move1.md` in the parent workspace.
 
 | Service | Source | Runs |
 |---|---|---|
@@ -94,14 +98,14 @@ uv run python db/migrate.py
 The command is scoped to the production environment (nested under
 `environments.production` in the config file, Railway's per-environment override
 syntax) so PR preview environments never migrate. Previews share the production
-Supabase database, and a PR branch carrying a new migration must not rewrite the
+Railway database, and a PR branch carrying a new migration must not rewrite the
 shared schema just by deploying a preview. See the preview section below for the
 flip side of that hazard.
 
 Railway runs `preDeployCommand` once, inside the freshly built image, before the new
 version goes live. So a deploy can't serve code that expects a column the database doesn't
 have yet, the schema is caught up first, or the deploy fails and the old version keeps
-serving. It reads `DATABASE_URL` (the api's, the Supabase session pooler on 5432, which
+serving. It reads `DATABASE_URL` (the api's, the Railway TCP proxy, a direct connection that
 supports the DDL a migration needs).
 
 [migrate.py](../packages/core/db/migrate.py) is a ~50-line applier over dbmate's own file
@@ -147,7 +151,7 @@ production `preDeployCommand` that applies the `msg_*` migration), the `messagin
 4. **Record the id.** Copy the new service id into the repo-root `.env` as
    `RAILWAY_MESSAGING_SERVICE_ID=...` so the sync script stops skipping it.
 5. **Push env vars.** `python3 infra/railway-env.py sync --dry` to preview
-   (`DATABASE_URL` from `DATABASE_URL_SUPABASE`, `REDIS_URL` from the shared reference
+   (`DATABASE_URL` from `DATABASE_URL_RAILWAY`, `REDIS_URL` from the shared reference
    template), then drop `--dry` to push.
 6. **Deploy.** It auto-deploys on the next push to `main`, or trigger one manually. The
    `preDeployCommand` runs `migrate.py` first, so the `msg_*` tables are created before the
@@ -200,14 +204,15 @@ preview database. That means
   touching the new column/table will 500 in the preview. That's the accepted trade-off;
   apply the migration locally to test it, the preview verifies everything else.
 - **Preview writes are production writes.** A `demo` or `live` run started against a
-  preview api inserts real rows into the shared Supabase database. The worker's beat
+  preview api inserts real rows into the shared Railway database. The worker's beat
   backstops also run (the matview refresh is idempotent and harmless, the unrated sweep
   stays inert while `RATING_MODEL` is unset in the cloned vars).
 - Redis IS per-preview (each environment gets its own instance), so queues and SSE
   pub/sub don't cross between preview and prod.
 
-If previews ever need real isolation, the move is a Supabase branch database per PR wired
-into the same workflow, punted for now (see `packages/package-supabase/` consolidation).
+If previews ever need real isolation, the move is a per-PR database on the same Railway
+Postgres instance (a `CREATE DATABASE` in the preview workflow, dropped on merge), punted
+for now.
 
 ### One-time setup already done (dashboard-free, for the record)
 
